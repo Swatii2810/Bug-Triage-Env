@@ -10,10 +10,11 @@ RUN pip install --no-cache-dir --timeout 300 \
     fastapi==0.104.1 \
     uvicorn==0.24.0 \
     pydantic==2.5.0 \
-    openai==1.3.0 \
+    "openai>=2.7.2" \
     pyyaml==6.0.1 \
     python-dotenv==1.0.0 \
-    requests==2.31.0
+    requests==2.31.0 \
+    "openenv-core>=0.2.0"
 
 COPY . .
 
