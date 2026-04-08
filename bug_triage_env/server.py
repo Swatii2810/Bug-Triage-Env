@@ -5,9 +5,9 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Any
+from typing import Optional
 
 from models import (
     BugTriageObservation,
@@ -51,11 +51,13 @@ def health():
 
 
 @app.post("/reset", response_model=BugTriageObservation)
-def reset(body: Optional[Any] = Body(default=None)):
+async def reset(request: Request):
     try:
-        task_id = 1
-        if isinstance(body, dict) and "task_id" in body:
-            task_id = int(body["task_id"])
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        task_id = int(body.get("task_id", 1)) if isinstance(body, dict) else 1
         obs = env.reset(task_id=task_id)
         return obs
     except ValueError as e:
