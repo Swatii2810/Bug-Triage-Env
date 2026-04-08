@@ -11,3 +11,4 @@ venv/
 *.egg-info/
 dist/
 build/
+upload_to_hf.py

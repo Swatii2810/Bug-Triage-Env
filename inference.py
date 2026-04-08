@@ -1,12 +1,12 @@
 """
 Baseline inference script for the Bug Triage Environment.
 
-Log format:
-  [START] {"task_id": 1, "episode": 0}
-  [STEP]  {"step": 1, "action": {...}, "reward": 0.0, "done": false}
-  [END]   {"task_id": 1, "total_reward": 0.85, "steps": 3}
+Log format (strict):
+  [START] task=1 episode=0
+  [STEP] action={...} reward=0.0 done=false
+  [END] total_reward=0.85
 
-Env vars: API_BASE_URL, MODEL_NAME, HF_TOKEN (used as api_key)
+Env vars: API_BASE_URL, MODEL_NAME, HF_TOKEN
 """
 
 import os
@@ -17,14 +17,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "llama-3.1-8b-instant")
-HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
-OPENAI_KEY   = os.environ.get("OPENAI_API_KEY", HF_TOKEN)
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
+MODEL_NAME   = os.getenv("MODEL_NAME",   "llama-3.1-8b-instant")
+HF_TOKEN     = os.getenv("HF_TOKEN",     "")
+OPENAI_KEY   = os.getenv("OPENAI_API_KEY") or HF_TOKEN
+LLM_BASE_URL = os.getenv("LLM_BASE_URL",  "https://api.groq.com/openai/v1")
 
 client = OpenAI(
     api_key=OPENAI_KEY,
-    base_url=API_BASE_URL,
+    base_url=LLM_BASE_URL,
 )
 
 VALID_TYPES      = ["bug", "feature", "question"]
@@ -106,11 +107,9 @@ TASK_MAX_STEPS = {1: 1, 2: 2, 3: 3}
 
 
 def run_episode(task_id: int, episode: int) -> float:
-    print(json.dumps({"tag": "[START]", "task_id": task_id, "episode": episode}))
+    print(f"[START] task={task_id} episode={episode}", flush=True)
 
-    resp = requests.post(
-        f"http://localhost:7860/reset", json={"task_id": task_id}
-    )
+    resp = requests.post(f"{API_BASE_URL}/reset", json={"task_id": task_id})
     resp.raise_for_status()
     obs = resp.json()
 
@@ -120,9 +119,7 @@ def run_episode(task_id: int, episode: int) -> float:
 
     for _ in range(max_steps):
         action = call_llm(obs)
-        step_resp = requests.post(
-            "http://localhost:7860/step", json={"action": action}
-        )
+        step_resp = requests.post(f"{API_BASE_URL}/step", json={"action": action})
         step_resp.raise_for_status()
         result = step_resp.json()
 
@@ -132,24 +129,15 @@ def run_episode(task_id: int, episode: int) -> float:
         step_count += 1
         total_reward += reward
 
-        print(json.dumps({
-            "tag":    "[STEP]",
-            "step":   step_count,
-            "action": action,
-            "reward": reward,
-            "done":   done,
-        }))
+        print(
+            f"[STEP] action={json.dumps(action)} reward={reward} done={str(done).lower()}",
+            flush=True,
+        )
 
         if done:
             break
 
-    print(json.dumps({
-        "tag":          "[END]",
-        "task_id":      task_id,
-        "total_reward": round(total_reward, 4),
-        "steps":        step_count,
-    }))
-
+    print(f"[END] total_reward={round(total_reward, 4)}", flush=True)
     return total_reward
 
 
@@ -164,7 +152,7 @@ def main():
             rewards.append(r)
         avg = round(sum(rewards) / len(rewards), 4)
         summary[f"task_{task_id}"] = {"episodes": rewards, "avg_reward": avg}
-        print(f"\n=== Task {task_id} avg reward: {avg} ===\n")
+        print(f"\n=== Task {task_id} avg reward: {avg} ===\n", flush=True)
 
     print("\n=== Final Summary ===")
     print(json.dumps(summary, indent=2))
