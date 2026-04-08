@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 from models import (
     BugTriageObservation,
@@ -51,9 +52,10 @@ def health():
 
 
 @app.post("/reset", response_model=BugTriageObservation)
-def reset(request: ResetRequest):
+def reset(request: Optional[ResetRequest] = None):
     try:
-        obs = env.reset(task_id=request.task_id)
+        task_id = request.task_id if request else 1
+        obs = env.reset(task_id=task_id)
         return obs
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
