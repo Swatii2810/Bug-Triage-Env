@@ -2,11 +2,15 @@
 Baseline inference script for the Bug Triage Environment.
 
 Log format:
-  [START] {"task_id": 1, "episode": 0}
-  [STEP]  {"step": 1, "action": {...}, "reward": 0.0, "done": false}
-  [END]   {"task_id": 1, "total_reward": 0.85, "steps": 3}
+  [START] task=1 episode=0
+  [STEP]  step=1 reward=0.0 done=false
+  [END]   task=1 score=0.85 steps=1
 
-Env vars: API_BASE_URL, MODEL_NAME, HF_TOKEN (used as api_key)
+Env vars injected by validator:
+  API_BASE_URL — LLM proxy base URL
+  API_KEY      — LLM proxy API key
+  MODEL_NAME   — model to use
+  ENV_URL      — running environment server URL
 """
 
 import os
@@ -19,14 +23,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# The validator injects API_BASE_URL pointing at the running env container
-ENV_URL    = os.environ.get("API_BASE_URL", "http://localhost:7860")
-MODEL_NAME = os.environ.get("MODEL_NAME",   "llama-3.1-8b-instant")
-HF_TOKEN   = os.environ.get("HF_TOKEN",     "")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or HF_TOKEN
-LLM_URL    = os.environ.get("LLM_BASE_URL",  "https://api.groq.com/openai/v1")
+# Validator injects API_BASE_URL (LLM proxy) and API_KEY
+# ENV_URL is the running environment server (separate)
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
+API_KEY      = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.1-8b-instant")
+ENV_URL      = os.environ.get("ENV_URL", "http://localhost:7860")
 
-client = OpenAI(api_key=OPENAI_KEY, base_url=LLM_URL)
+client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
 VALID_TYPES      = ["bug", "feature", "question"]
 VALID_SEVERITIES = ["P1", "P2", "P3", "P4"]
