@@ -165,9 +165,9 @@ def run_episode(task_id: int, episode: int) -> float:
         if done:
             break
 
-    score = round(total_reward, 4)
+    score = round(max(0.001, min(0.999, total_reward)), 4)
     print(f"[END] task={task_id} score={score} steps={step_count}", flush=True)
-    return total_reward
+    return score
 
 
 def main():

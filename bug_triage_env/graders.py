@@ -2,6 +2,15 @@
 
 from models import BugTriageAction, BugTriageReward
 
+# Validator requires scores strictly between 0 and 1 (exclusive)
+_SCORE_MIN = 0.001
+_SCORE_MAX = 0.999
+
+
+def _clamp(score: float) -> float:
+    """Clamp score to strictly (0, 1) as required by the validator."""
+    return round(max(_SCORE_MIN, min(_SCORE_MAX, score)), 4)
+
 
 def _repro_quality(repro_text: str, keywords: list[str]) -> float:
     # Partial credit: score proportional to keyword coverage, max 0.20
@@ -13,7 +22,7 @@ def _repro_quality(repro_text: str, keywords: list[str]) -> float:
 
 def grade_task1(action: BugTriageAction, ground_truth: dict) -> BugTriageReward:
     correct = action.issue_type == ground_truth["issue_type"]
-    score = 1.0 if correct else 0.0
+    score = _clamp(1.0 if correct else 0.0)
     return BugTriageReward(
         total=score,
         type_score=score,
@@ -34,7 +43,7 @@ def grade_task2(action: BugTriageAction, ground_truth: dict) -> BugTriageReward:
 
     sev_score = 0.50 if sev_correct else 0.0
     comp_score = 0.50 if comp_correct else 0.0
-    total = round(sev_score + comp_score, 4)
+    total = _clamp(round(sev_score + comp_score, 4))
 
     return BugTriageReward(
         total=total,
@@ -67,12 +76,11 @@ def grade_task3(action: BugTriageAction, ground_truth: dict) -> BugTriageReward:
         action.duplicate_of.strip() == ground_truth.get("duplicate_of", "").strip()
     )
     if expected_dup:
-        # both the flag and the ID must be correct
         dup_score = 0.15 if (predicted_dup and dup_id_correct) else 0.0
     else:
         dup_score = 0.15 if not predicted_dup else 0.0
 
-    total = round(type_score + sev_score + comp_score + repro_score + dup_score, 4)
+    total = _clamp(round(type_score + sev_score + comp_score + repro_score + dup_score, 4))
 
     return BugTriageReward(
         total=total,
