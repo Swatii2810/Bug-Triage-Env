@@ -6,16 +6,15 @@ Log format:
   [STEP]  step=1 reward=0.0 done=false
   [END]   task=1 score=0.85 steps=1
 
-Env vars injected by validator:
-  API_BASE_URL — LLM proxy base URL
-  API_KEY      — LLM proxy API key
-  MODEL_NAME   — model to use
-  ENV_URL      — running environment server URL
+Validator injects:
+  API_BASE_URL — LLM proxy base URL  (required)
+  API_KEY      — LLM proxy API key   (required)
+  MODEL_NAME   — model name
+  ENV_URL      — environment server URL
 """
 
 import os
 import json
-import sys
 import time
 import requests
 from openai import OpenAI
@@ -23,14 +22,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Validator injects API_BASE_URL (LLM proxy) and API_KEY
-# ENV_URL is the running environment server (separate)
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
-API_KEY      = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.1-8b-instant")
+# Use exactly the vars the validator injects — no fallback to other providers
+API_BASE_URL = os.environ["API_BASE_URL"]
+API_KEY      = os.environ["API_KEY"]
+MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 ENV_URL      = os.environ.get("ENV_URL", "http://localhost:7860")
 
-client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
+# OpenAI client pointed at the validator's LiteLLM proxy
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=API_BASE_URL,
+)
 
 VALID_TYPES      = ["bug", "feature", "question"]
 VALID_SEVERITIES = ["P1", "P2", "P3", "P4"]
@@ -48,7 +50,7 @@ DEFAULT_ACTION = {
     "severity":      "P3",
     "component":     "backend",
     "assigned_team": "core",
-    "repro_steps":   "reproduce by following the steps in the description",
+    "repro_steps":   "follow steps in the description",
     "is_duplicate":  False,
     "duplicate_of":  "",
 }
@@ -79,23 +81,28 @@ def build_user_prompt(obs: dict) -> str:
 
 
 def call_llm(obs: dict) -> dict:
+    # Make the actual API call through the validator's proxy — no try/except
+    # so failures are visible and the proxy call is always attempted
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": build_user_prompt(obs)},
+        ],
+        temperature=0.0,
+    )
+    raw = response.choices[0].message.content.strip()
+
+    # strip markdown fences if model adds them
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": build_user_prompt(obs)},
-            ],
-            temperature=0.0,
-        )
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
         action = json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         action = {}
 
     for k, v in DEFAULT_ACTION.items():
@@ -110,7 +117,6 @@ def call_llm(obs: dict) -> dict:
 
 
 def env_post(path: str, payload: dict = None, retries: int = 3) -> dict:
-    """POST to the env server with retries. Never raises — returns {} on failure."""
     url = f"{ENV_URL}{path}"
     for attempt in range(retries):
         try:
@@ -174,8 +180,8 @@ def main():
         summary[f"task_{task_id}"] = {"episodes": rewards, "avg_reward": avg}
         print(f"\n=== Task {task_id} avg reward: {avg} ===\n", flush=True)
 
-    print("\n=== Final Summary ===")
-    print(json.dumps(summary, indent=2))
+    print("\n=== Final Summary ===", flush=True)
+    print(json.dumps(summary, indent=2), flush=True)
 
 
 if __name__ == "__main__":
