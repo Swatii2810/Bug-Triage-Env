@@ -124,11 +124,11 @@ TASK_MAX_STEPS = {1: 1, 2: 2, 3: 3}
 
 
 def run_episode(task_id: int, episode: int) -> float:
-    print(json.dumps({"tag": "[START]", "task_id": task_id, "episode": episode}), flush=True)
+    print(f"[START] task={task_id} episode={episode}", flush=True)
 
     obs = env_post("/reset", {"task_id": task_id})
     if not obs:
-        print(json.dumps({"tag": "[END]", "task_id": task_id, "total_reward": 0.0, "steps": 0}), flush=True)
+        print(f"[END] task={task_id} score=0.0 steps=0", flush=True)
         return 0.0
 
     max_steps    = TASK_MAX_STEPS[task_id]
@@ -147,24 +147,13 @@ def run_episode(task_id: int, episode: int) -> float:
         step_count += 1
         total_reward += reward
 
-        print(json.dumps({
-            "tag":    "[STEP]",
-            "step":   step_count,
-            "action": action,
-            "reward": reward,
-            "done":   done,
-        }), flush=True)
+        print(f"[STEP] step={step_count} reward={reward} done={str(done).lower()}", flush=True)
 
         if done:
             break
 
-    print(json.dumps({
-        "tag":          "[END]",
-        "task_id":      task_id,
-        "total_reward": round(total_reward, 4),
-        "steps":        step_count,
-    }), flush=True)
-
+    score = round(total_reward, 4)
+    print(f"[END] task={task_id} score={score} steps={step_count}", flush=True)
     return total_reward
 
 
