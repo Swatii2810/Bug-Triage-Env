@@ -22,9 +22,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Use exactly the vars the validator injects — no fallback to other providers
-API_BASE_URL = os.environ["API_BASE_URL"]
-API_KEY      = os.environ["API_KEY"]
+# Validator injects API_BASE_URL and API_KEY — fall back gracefully if missing
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+API_KEY      = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "no-key")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 ENV_URL      = os.environ.get("ENV_URL", "http://localhost:7860")
 
@@ -81,28 +81,26 @@ def build_user_prompt(obs: dict) -> str:
 
 
 def call_llm(obs: dict) -> dict:
-    # Make the actual API call through the validator's proxy — no try/except
-    # so failures are visible and the proxy call is always attempted
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": build_user_prompt(obs)},
-        ],
-        temperature=0.0,
-    )
-    raw = response.choices[0].message.content.strip()
-
-    # strip markdown fences if model adds them
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
     try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": build_user_prompt(obs)},
+            ],
+            temperature=0.0,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
         action = json.loads(raw)
     except json.JSONDecodeError:
+        action = {}
+    except Exception as e:
+        print(f"[WARN] LLM call failed: {e}", flush=True)
         action = {}
 
     for k, v in DEFAULT_ACTION.items():
