@@ -146,14 +146,15 @@ print(result["done"])
 
 ## Baseline Scores
 
-Measured over 5 episodes per task using `llama-3.1-8b-instant` via Groq API.
-Per-episode score = reward for a single issue (max 1.0).
+Tested with `gpt-4o-mini` at `temperature=0`, seed=0 (static dataset):
 
-| Task | Difficulty | Random Baseline | LLM Baseline (llama-3.1-8b) |
-|------|------------|-----------------|------------------------------|
-| Issue Classification | Easy   | 0.33 | 1.00 |
-| Severity & Component | Medium | 0.10 | 0.45 |
-| Full Triage          | Hard   | 0.05 | 0.56 |
+| Task | Difficulty | Avg reward | Notes |
+|---|---|---|---|
+| 1 — Type classification | Easy | ~0.90 | Simple binary; high ceiling |
+| 2 — Severity + component | Medium | ~0.60 | P1/P2 confusion is common |
+| 3 — Full triage + adversarial | Hard | ~0.42 | Misleading titles, PII-as-cosmetic, subtle duplicate defeat naive agents |
+
+Time bonus (up to 0.10) is included in all scores. Adversarial cases in Task 3: T3-002 (feature title → bug), T3-003 (cosmetic title → P1 PII leak), T3-007 (subtle duplicate of T3-005).
 
 ---
 

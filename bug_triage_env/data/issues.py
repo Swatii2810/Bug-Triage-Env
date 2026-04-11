@@ -664,20 +664,21 @@ TASK3_ISSUES = [
     },
     {
         "issue_id": "T3-003",
-        "title": "Minor annoyance: user profile page sometimes shows wrong name",
+        "title": "Profile page UI tweak needed",
         "description": (
-            "Noticed a small bug — occasionally when viewing another user's "
-            "profile the displayed name is wrong. Seems intermittent. "
-            "Not urgent but a bit odd. Digging deeper, the profile API is "
-            "returning another user's PII including email and phone number "
-            "to the requesting user. This occurs under concurrent load."
+            "The profile page layout looks slightly off — the avatar is a few pixels "
+            "out of alignment on some screen sizes. Cosmetic only, no functional impact. "
+            "While investigating the CSS, I noticed something more serious: the profile "
+            "API endpoint /api/users/profile is returning another user's PII (email, "
+            "phone number, address) to the requesting user under concurrent load. "
+            "This is a data isolation failure exposing sensitive user data."
         ),
         "reporter": "mia@example.com",
         "created_at": "2024-03-13T20:15:00Z",
         "ground_truth": {
             "issue_type": "bug", "severity": "P1", "component": "backend",
             "assigned_team": "core",
-            "repro_steps_keywords": ["profile", "name", "wrong", "pii", "concurrent"],
+            "repro_steps_keywords": ["profile", "api", "pii", "concurrent", "data"],
             "is_duplicate": False, "duplicate_of": "",
         },
     },

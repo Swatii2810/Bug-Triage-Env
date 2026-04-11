@@ -27,16 +27,47 @@ tasks:
     task_id: 3
 
 action_space: BugTriageAction
-observation_space: BugTriageObservation
+observation_space:
+  type: BugTriageObservation
+  properties:
+    issue_id:         {type: string}
+    title:            {type: string}
+    description:      {type: string}
+    reporter:         {type: string}
+    created_at:       {type: string}
+    existing_issues:  {type: array, description: "Prior issues for duplicate detection (Task 3 only)"}
+    task_id:          {type: integer}
+    step_number:      {type: integer}
+    max_steps:        {type: integer}
+    episode_history:
+      type: array
+      description: "Agent's own prior triage decisions this episode. Each entry: {issue_id, title, agent_type, agent_severity, agent_component, reward}"
 
 endpoints:
-  reset:  POST /reset
-  step:   POST /step
-  state:  GET  /state
-  health: GET  /health
+  reset:   POST /reset
+  step:    POST /step
+  state:   GET  /state
+  health:  GET  /health
+  metrics: GET  /metrics
 
-reward:
-  min: 0.0
-  max: 1.0
-  type: continuous
-  partial: true
+reward_range: [0.001, 0.999]
+reward_description: >
+  Per-step reward reflecting partial progress. All scores clamped to
+  (0.001, 0.999). Includes a time bonus (up to 0.10) for acting on the
+  first available step — modelling real-world SLA pressure.
+
+reward_components:
+  task_1:
+    - "issue_type: 0.90"
+    - "time_bonus: 0.10"
+  task_2:
+    - "severity: 0.45"
+    - "component: 0.45"
+    - "time_bonus: 0.10"
+  task_3:
+    - "issue_type: 0.18"
+    - "severity: 0.22"
+    - "component: 0.18"
+    - "repro_steps: 0.00-0.18 (keyword coverage)"
+    - "duplicate: 0.14"
+    - "time_bonus: 0.10"

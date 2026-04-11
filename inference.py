@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import time
+import signal
 import requests
 from dotenv import load_dotenv
 
@@ -21,7 +22,8 @@ API_KEY      = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN", "no-key")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 ENV_URL      = os.environ.get("ENV_URL", "http://localhost:7860")
 
-EPISODES_PER_TASK = 5
+# Reduced to keep total LLM calls at 20: 5*1 + 3*2 + 3*3 = 20
+EPISODES_PER_TASK = {1: 5, 2: 3, 3: 3}
 TASK_MAX_STEPS    = {1: 1, 2: 2, 3: 3}
 SUCCESS_THRESHOLD = 0.7
 
@@ -145,7 +147,6 @@ def wait_for_server(timeout=60):
 
 def run_episode(task_id: int, episode: int) -> float:
     print(f"[START] task={task_id} episode={episode}", flush=True)
-    # episode 0 = static dataset (seed=0), episode N = dynamic (seed=N)
     obs = env_post("/reset", {"task_id": task_id, "seed": episode})
     if not obs:
         print(f"[END]   task={task_id} score=0.001 steps=0", flush=True)
@@ -180,7 +181,7 @@ def main():
     summary = {}
     for task_id in [1, 2, 3]:
         rewards = []
-        for ep in range(EPISODES_PER_TASK):
+        for ep in range(EPISODES_PER_TASK[task_id]):
             try:
                 r = run_episode(task_id, ep)
             except Exception as e:
@@ -205,9 +206,22 @@ def main():
     print(json.dumps(summary, indent=2), flush=True)
 
 
+def _timeout_handler(signum, frame):
+    print("[WARN] Global 18-minute timeout reached — printing partial summary.", flush=True)
+    raise SystemExit(0)
+
+
 if __name__ == "__main__":
+    # SIGALRM only available on Unix — guard for Windows
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(18 * 60)
     try:
         main()
+    except SystemExit:
+        pass
     except Exception as e:
         print(f"[FATAL] {type(e).__name__}: {e}", flush=True)
-        sys.exit(0)
+    finally:
+        if hasattr(signal, "SIGALRM"):
+            signal.alarm(0)

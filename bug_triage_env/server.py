@@ -123,32 +123,36 @@ def state():
 @app.get("/metrics")
 def get_metrics() -> dict:
     with _metrics_lock:
-        avg_by_task = {}
-        for t, rewards in _metrics["rewards_by_task"].items():
-            avg_by_task[t] = round(sum(rewards) / len(rewards), 4) if rewards else 0.0
-
-        comp_acc = {}
-        for comp in set(_metrics["component_total"].keys()):
-            total   = _metrics["component_total"][comp]
-            correct = _metrics["component_correct"][comp]
-            comp_acc[comp] = {"correct": correct, "total": total,
-                               "rate": round(correct / total, 4) if total else 0.0}
-
-        sev_acc = {}
-        for sev in set(_metrics["severity_total"].keys()):
-            total   = _metrics["severity_total"][sev]
-            correct = _metrics["severity_correct"][sev]
-            sev_acc[sev] = {"correct": correct, "total": total,
-                             "rate": round(correct / total, 4) if total else 0.0}
-
-        dup_total = _metrics["duplicate_total"]
         return {
-            "total_resets":            _metrics["total_resets"],
-            "total_steps":             _metrics["total_steps"],
-            "avg_reward_by_task":      avg_by_task,
-            "component_accuracy":      comp_acc,
-            "severity_accuracy":       sev_acc,
-            "duplicate_detection_rate": (
-                round(_metrics["duplicate_correct"] / dup_total, 4) if dup_total else 0.0
-            ),
+            "total_resets": _metrics["total_resets"],
+            "total_steps":  _metrics["total_steps"],
+            "avg_reward_by_task": {
+                t: round(sum(r) / len(r), 4) if r else 0.0
+                for t, r in _metrics["rewards_by_task"].items()
+            },
+            "component_accuracy": {
+                comp: {
+                    "correct": _metrics["component_correct"][comp],
+                    "total":   _metrics["component_total"][comp],
+                    "rate": round(
+                        _metrics["component_correct"][comp] /
+                        _metrics["component_total"][comp], 4
+                    ) if _metrics["component_total"][comp] else 0.0,
+                }
+                for comp in _metrics["component_total"]
+            },
+            "severity_accuracy": {
+                sev: {
+                    "correct": _metrics["severity_correct"][sev],
+                    "total":   _metrics["severity_total"][sev],
+                    "rate": round(
+                        _metrics["severity_correct"][sev] /
+                        _metrics["severity_total"][sev], 4
+                    ) if _metrics["severity_total"][sev] else 0.0,
+                }
+                for sev in _metrics["severity_total"]
+            },
+            "duplicate_detection_rate": round(
+                _metrics["duplicate_correct"] / _metrics["duplicate_total"], 4
+            ) if _metrics["duplicate_total"] else 0.0,
         }
