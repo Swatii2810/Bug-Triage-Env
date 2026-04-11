@@ -22,6 +22,7 @@ class BugTriageObservation(BaseModel):
     task_id: int
     step_number: int
     max_steps: int
+    episode_history: list = []  # agent's own prior triage decisions this episode
 
 
 class BugTriageReward(BaseModel):
@@ -31,11 +32,13 @@ class BugTriageReward(BaseModel):
     component_score: float  # 0.0 or 0.20
     repro_score: float      # 0.0–0.20 partial
     duplicate_score: float  # 0.0 or 0.15
+    time_score: float       # 0.0–0.10 SLA bonus
     breakdown: dict
 
 
 class ResetRequest(BaseModel):
     task_id: int = Field(default=1, ge=1, le=3)
+    seed: Optional[int] = Field(default=None)
 
 
 class StepRequest(BaseModel):

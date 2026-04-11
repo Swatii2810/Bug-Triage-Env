@@ -623,4 +623,154 @@ ISSUES = [
 # Task-specific issue subsets
 TASK1_ISSUES = ISSUES[:10]   # Easy: just classify type
 TASK2_ISSUES = ISSUES[10:20] # Medium: severity + component
-TASK3_ISSUES = ISSUES[20:]   # Hard: full triage with duplicate detection
+
+# Adversarial Task 3 set — 8 hand-crafted issues with misleading titles and subtle duplicates
+TASK3_ISSUES = [
+    {
+        "issue_id": "T3-001",
+        "title": "App freezes when opening notification tray on iOS 17",
+        "description": (
+            "After v4.2.1 the app freezes 5-10 seconds whenever the user pulls "
+            "down the iOS notification tray while in the foreground. Steps: "
+            "1) Open app. 2) Pull down from top to show notifications. 3) Observe freeze. "
+            "Affects iPhone 12+ running iOS 17.x."
+        ),
+        "reporter": "kate@example.com",
+        "created_at": "2024-03-11T08:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P2", "component": "mobile",
+            "assigned_team": "mobile",
+            "repro_steps_keywords": ["open", "notification", "freeze", "ios", "foreground"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-002",
+        "title": "Enhancement: improve data export reliability",
+        "description": (
+            "Since the v4.3.0 deploy, the CSV export feature silently produces "
+            "empty files for any dataset over 10,000 rows. Users discover the "
+            "loss only after downloading. The previous version worked correctly. "
+            "This is causing data loss for finance team exports."
+        ),
+        "reporter": "liam@example.com",
+        "created_at": "2024-03-12T09:30:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P1", "component": "backend",
+            "assigned_team": "core",
+            "repro_steps_keywords": ["export", "csv", "empty", "download", "rows"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-003",
+        "title": "Minor annoyance: user profile page sometimes shows wrong name",
+        "description": (
+            "Noticed a small bug — occasionally when viewing another user's "
+            "profile the displayed name is wrong. Seems intermittent. "
+            "Not urgent but a bit odd. Digging deeper, the profile API is "
+            "returning another user's PII including email and phone number "
+            "to the requesting user. This occurs under concurrent load."
+        ),
+        "reporter": "mia@example.com",
+        "created_at": "2024-03-13T20:15:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P1", "component": "backend",
+            "assigned_team": "core",
+            "repro_steps_keywords": ["profile", "name", "wrong", "pii", "concurrent"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-004",
+        "title": "Dashboard shows stale data after editing a record",
+        "description": (
+            "After editing any record in the admin panel, the dashboard table "
+            "still shows the old value. A full page refresh shows the correct "
+            "data. Initially suspected a React state bug, but the /api/records "
+            "endpoint returns the stale value without refresh — the backend "
+            "response is served from a cache that is not invalidated on write."
+        ),
+        "reporter": "noah@example.com",
+        "created_at": "2024-03-14T14:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P2", "component": "backend",
+            "assigned_team": "platform",
+            "repro_steps_keywords": ["stale", "cache", "edit", "dashboard", "invalidate"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-005",
+        "title": "Push notifications not delivered on Android after Firebase upgrade",
+        "description": (
+            "Users report missing push notifications on Android 12+. Started "
+            "after Firebase SDK updated from v30 to v32. iOS unaffected. "
+            "FCM send logs show messages dispatched but devices never display them."
+        ),
+        "reporter": "olivia@example.com",
+        "created_at": "2024-03-15T09:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P2", "component": "mobile",
+            "assigned_team": "mobile",
+            "repro_steps_keywords": ["push", "notification", "android", "firebase", "fcm"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-006",
+        "title": "App hangs briefly when notification arrives on Android",
+        "description": (
+            "When a push notification arrives while the app is open on Android 13, "
+            "the UI freezes for 2-3 seconds. This is different from the iOS "
+            "notification tray issue. Root cause appears to be the notification "
+            "handler blocking the main thread on the Android SDK side."
+        ),
+        "reporter": "peter@example.com",
+        "created_at": "2024-03-16T10:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P3", "component": "mobile",
+            "assigned_team": "mobile",
+            "repro_steps_keywords": ["android", "notification", "freeze", "handler", "thread"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+    {
+        "issue_id": "T3-007",
+        "title": "Android users stopped receiving alerts after last SDK release",
+        "description": (
+            "Our Android customers are not getting any in-app alerts since the "
+            "infrastructure team pushed the Firebase dependency update last sprint. "
+            "Checked the messaging dashboard — the platform confirms delivery but "
+            "nothing shows on the handsets. iPhone users are fine."
+        ),
+        "reporter": "quinn@example.com",
+        "created_at": "2024-03-17T11:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P2", "component": "mobile",
+            "assigned_team": "mobile",
+            "repro_steps_keywords": ["android", "firebase", "alert", "delivery", "sdk"],
+            "is_duplicate": True, "duplicate_of": "T3-005",
+        },
+    },
+    {
+        "issue_id": "T3-008",
+        "title": "Database connection pool exhausted under peak load",
+        "description": (
+            "During peak hours (18:00-20:00 UTC) the app throws 'too many connections'. "
+            "pg_stat_activity shows 500/500 connections. Pool not releasing connections "
+            "after requests — suspected ORM session teardown leak. Causes 503 for ~15% of users."
+        ),
+        "reporter": "rachel@example.com",
+        "created_at": "2024-03-18T20:00:00Z",
+        "ground_truth": {
+            "issue_type": "bug", "severity": "P1", "component": "database",
+            "assigned_team": "platform",
+            "repro_steps_keywords": ["connection", "pool", "leak", "peak", "503"],
+            "is_duplicate": False, "duplicate_of": "",
+        },
+    },
+]
+
+# Full issues alias used for duplicate context lookup
+ISSUES = TASK3_ISSUES
