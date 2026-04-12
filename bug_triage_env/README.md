@@ -11,157 +11,172 @@ tags:
 - reinforcement-learning
 ---
 
-# Bug Triage Environment
+# Bug Triage Environment — OpenEnv
 
-An OpenEnv-compatible environment for software bug triage. An AI agent receives GitHub-style issue reports and must classify, prioritize, and resolve them.
+> **A reinforcement learning environment for training AI agents on real-world
+> software bug triage** — the daily engineering workflow of classifying,
+> prioritising, routing, and deduplicating incoming issue reports.
 
-## Motivation
-
-Bug triage is a high-value, repetitive engineering task. This repo provides a deterministic benchmark with partial reward signals for training and evaluating triage agents.
+[![HF Space](https://img.shields.io/badge/🤗%20Space-swasss0%2Fbug--triage--env-blue)](https://huggingface.co/spaces/swasss0/bug-triage-env)
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-compatible-green)](https://github.com/meta-pytorch/OpenEnv)
 
 ---
 
-## Action Space
+## Why This Environment
 
-| Field | Type | Valid Values | Description |
-|---|---|---|---|
-| `issue_type` | string | `bug`, `feature`, `question` | Classification of the issue |
-| `severity` | string | `P1`, `P2`, `P3`, `P4` | Priority level (P1=critical, P4=low) |
-| `component` | string | `frontend`, `backend`, `infra`, `database`, `mobile` | Affected system component |
-| `assigned_team` | string | `core`, `platform`, `devops`, `mobile` | Team responsible for resolution |
-| `repro_steps` | string | Free text | Steps to reproduce the issue |
-| `is_duplicate` | boolean | `true`, `false` | Whether this is a duplicate issue |
-| `duplicate_of` | string | Issue ID or `""` | ID of the original issue if duplicate |
+Every software team with a public issue tracker faces the same problem: a continuous stream of incoming reports that must be read, understood, classified, and routed before any engineer can act on them. This task requires real language understanding — titles can be misleading, severity cues are buried in descriptions, and duplicate reports are paraphrased rather than copied.
 
-## Observation Space
+This environment is designed so that **naive agents fail in interesting ways**:
+- An agent that reads only the title will misclassify adversarial issues
+- An agent that ignores severity language will route P1 incidents as P3
+- An agent without memory of prior issues will miss paraphrased duplicates
 
-| Field | Type | Description |
-|---|---|---|
-| `issue_id` | string | Unique issue identifier (e.g. `ISSUE-001`) |
-| `title` | string | Short issue title |
-| `description` | string | Full issue description |
-| `reporter` | string | Username of the reporter |
-| `created_at` | string | ISO 8601 timestamp |
-| `existing_issues` | list | Prior issues for duplicate detection (Task 3 only) |
-| `task_id` | int | Current task (1, 2, or 3) |
-| `step_number` | int | Current step within the episode |
-| `max_steps` | int | Maximum steps allowed for this task |
+These are the same failure modes seen in real triage tooling. Fixing them requires genuine language understanding, not pattern matching.
+
+---
+
+## Environment Design
+
+### What makes this trainable (not just evaluable)
+
+- **Feedback observations**: After each wrong triage decision, the next
+  observation includes a `feedback` field describing exactly what was
+  incorrect. An RL agent can use this signal to adjust within an episode.
+- **Dynamic generation**: `seed` parameter on `/reset` produces different
+  issue sets every episode. Agents cannot memorise the dataset.
+- **SLA time bonus**: Acting on the first available step earns up to 0.10
+  extra reward, modelling real-world SLA pressure.
+- **Episode history carry-over**: The agent's own prior triage decisions
+  appear in subsequent observations, enabling duplicate detection across
+  issues within one episode.
+
+### Action Space
+
+```json
+{
+  "issue_type":    "bug | feature | question",
+  "severity":      "P1 | P2 | P3 | P4",
+  "component":     "frontend | backend | infra | database | mobile",
+  "assigned_team": "core | platform | devops | mobile",
+  "repro_steps":   "",
+  "is_duplicate":  false,
+  "duplicate_of":  ""
+}
+```
+
+### Observation Space
+
+```json
+{
+  "issue_id":        "T3-003",
+  "title":           "Profile page UI tweak needed",
+  "description":     "...",
+  "reporter":        "mia@corp.io",
+  "created_at":      "2024-03-13T20:15:00Z",
+  "existing_issues": [...],
+  "episode_history": [...],
+  "feedback":        "Corrections: Severity was 'P3' but should be 'P1'",
+  "task_id":         3,
+  "step_number":     1,
+  "max_steps":       3
+}
+```
 
 ---
 
 ## Tasks
 
-### Task 1 — Issue Classification (easy)
-- Classify `issue_type` as `bug`, `feature`, or `question`.
-- Reward: `1.0` correct, `0.0` wrong.
-- Max steps: 1
+### Task 1 — Issue type classification *(Easy)*
+Classify each issue as `bug`, `feature`, or `question`. Reward: 1.0 if correct, 0.0 otherwise (+ time bonus up to 0.10). Expected baseline (gpt-4o-mini): **~0.90**
 
-### Task 2 — Severity & Component Routing (medium)
-- Assign correct `severity` (P1–P4) and `component`.
-- Reward: `+0.50` severity, `+0.50` component.
-- Max steps: 2
+### Task 2 — Severity and component routing *(Medium)*
+Predict the correct severity (P1–P4) and owning component. Reward: 0.50 per correct field (+ time bonus). Expected baseline (gpt-4o-mini): **~0.60**
 
-### Task 3 — Full Bug Triage (hard)
-- Full triage including duplicate detection against prior issues.
-- Reward breakdown:
+### Task 3 — Full triage with adversarial cases *(Hard)*
 
-| Criterion | Max Score |
-|---|---|
-| `issue_type` correct | +0.20 |
-| `severity` correct | +0.25 |
-| `component` correct | +0.20 |
-| `repro_steps` quality (keyword rubric) | +0.20 |
-| Duplicate detection correct | +0.15 |
-| **Total** | **1.00** |
+| Component | Weight | Graded by |
+|---|---|---|
+| `issue_type` | 0.18 | Exact match |
+| `severity` | 0.22 | Exact match |
+| `component` | 0.18 | Exact match |
+| `repro_steps` | 0–0.18 | Keyword coverage |
+| `duplicate` | 0.14 | Flag + correct parent ID |
+| `time bonus` | 0.10 | Step taken on step 1 |
 
-- Max steps: 3
+**Adversarial cases (intentional — designed to defeat naive agents):**
+- **T3-002**: Title says "Enhancement" but description is a P1 regression bug (data loss)
+- **T3-003**: Opens with "UI tweak" language but conceals a PII data leak (true severity: P1, component: backend)
+- **T3-007**: Paraphrased duplicate of T3-005 — same bug described with completely different vocabulary
+
+Expected baseline (gpt-4o-mini): **~0.42** A score above 0.65 on Task 3 indicates strong language understanding.
+
+---
+
+## API Reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/reset` | POST | Start new episode. Body: `{"task_id": 1\|2\|3, "seed": int\|null}` |
+| `/step` | POST | Submit triage action. Body: `{"action": {...}}` |
+| `/state` | GET | Current environment state |
+| `/health` | GET | Liveness probe |
+| `/metrics` | GET | Aggregate performance statistics |
+| `/leaderboard` | GET | Ranked difficulty analysis across all episodes |
 
 ---
 
 ## Setup
 
-### Local
-
 ```bash
-cd bug_triage_env
+# Local development
 pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 7860
-```
+uvicorn bug_triage_env.server:app --host 0.0.0.0 --port 7860
 
-### Docker
-
-```bash
-cd bug_triage_env
+# Docker
 docker build -t bug-triage-env .
 docker run -p 7860:7860 bug-triage-env
-```
 
-### Hugging Face Spaces
-
-Push the `bug_triage_env/` directory as a Docker Space. Port `7860` is pre-configured.
-
----
-
-## Running Inference
-
-From the project root:
-
-```bash
-export API_BASE_URL=http://localhost:7860
-export MODEL_NAME=gpt-4o-mini
-export OPENAI_API_KEY=sk-...
-
+# Run baseline
+ENV_URL=http://localhost:7860 \
+API_KEY=your-key \
+MODEL_NAME=gpt-4o-mini \
 python inference.py
 ```
 
 ---
 
-## Example Usage
+## Reward Function Design
 
-```python
-import requests
+The reward function is designed to provide **dense signal** throughout an episode, not just at the end:
 
-BASE = "http://localhost:7860"
+1. **Partial credit** (Tasks 2 & 3): Getting severity right but component
+   wrong still earns 0.22–0.50, so the agent has signal to improve each field
+   independently.
+2. **Keyword coverage** (repro_steps): Score proportional to how many of 5
+   expected keywords appear in the agent's reproduction steps. Encourages
+   descriptive, structured output.
+3. **SLA time bonus**: Rewards decisiveness. An agent that acts immediately
+   scores up to 0.10 higher than one that deliberates until the last step.
+4. **Feedback loop**: Wrong decisions generate a `feedback` string in the
+   next observation, enabling within-episode correction.
 
-# Start Task 1
-obs = requests.post(f"{BASE}/reset", json={"task_id": 1}).json()
-print(obs["title"])
+All rewards clamped to (0.001, 0.999) per OpenEnv validator requirements.
 
-# Submit an action
-action = {
-    "issue_type":    "bug",
-    "severity":      "P1",
-    "component":     "backend",
-    "assigned_team": "core",
-    "repro_steps":   "1. Open app 2. Click login 3. Observe crash",
-    "is_duplicate":  False,
-    "duplicate_of":  ""
-}
-result = requests.post(f"{BASE}/step", json={"action": action}).json()
-print(result["reward"])   # 1.0 if issue_type was correct
-print(result["done"])
+---
+
+## Project Structure
+
 ```
-
----
-
-## Baseline Scores
-
-Tested with `gpt-4o-mini` at `temperature=0`, seed=0 (static dataset):
-
-| Task | Difficulty | Avg reward | Notes |
-|---|---|---|---|
-| 1 — Type classification | Easy | ~0.90 | Simple binary; high ceiling |
-| 2 — Severity + component | Medium | ~0.60 | P1/P2 confusion is common |
-| 3 — Full triage + adversarial | Hard | ~0.42 | Misleading titles, PII-as-cosmetic, subtle duplicate defeat naive agents |
-
-Time bonus (up to 0.10) is included in all scores. Adversarial cases in Task 3: T3-002 (feature title → bug), T3-003 (cosmetic title → P1 PII leak), T3-007 (subtle duplicate of T3-005).
-
----
-
-## Dataset
-
-30 realistic GitHub-style issues in `data/issues.py`:
-- 10 bugs (P1 crashes, P2 data issues, P3 UI bugs)
-- 10 feature requests
-- 10 questions / support requests
-- 5 duplicates of earlier issues
+├── inference.py          # Baseline script (OpenAI client, structured logs)
+├── openenv.yaml          # OpenEnv spec metadata
+├── Dockerfile
+├── requirements.txt
+└── bug_triage_env/
+    ├── server.py         # FastAPI endpoints
+    ├── environment.py    # Core reset/step/state logic
+    ├── graders.py        # Deterministic per-task reward graders
+    ├── models.py         # Pydantic typed schemas
+    └── data/
+        ├── issues.py     # 18 labelled issues (5 + 5 + 8 adversarial)
+        └── generator.py  # Procedural issue generation (seed-based)
+```

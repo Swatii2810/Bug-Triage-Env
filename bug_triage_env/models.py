@@ -23,6 +23,7 @@ class BugTriageObservation(BaseModel):
     step_number: int
     max_steps: int
     episode_history: list = []  # agent's own prior triage decisions this episode
+    feedback: str = ""          # corrections from previous step, empty on first step
 
 
 class BugTriageReward(BaseModel):

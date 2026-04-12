@@ -23,6 +23,7 @@ class BugTriageEnvironment:
         self._issues:         list = TASK1_ISSUES
         self._current_issue:  Optional[dict] = None
         self._episode_history: list = []
+        self._last_feedback:  str  = ""
 
     def reset(self, task_id: int = 1, seed: Optional[int] = None) -> BugTriageObservation:
         if task_id not in TASK_ISSUES:
@@ -34,6 +35,7 @@ class BugTriageEnvironment:
         self._step_number  = 0
         self._done         = False
         self._episode_history = []
+        self._last_feedback   = ""
 
         # seed=0 → use original static dataset (backwards compat)
         if self._seed == 0:
@@ -60,6 +62,9 @@ class BugTriageEnvironment:
             step_number=self._step_number,
             max_steps=max_steps,
         )
+
+        # Generate feedback before advancing state
+        self._last_feedback = self._build_feedback(reward_obj, action)
 
         step_done = self._step_number >= max_steps
 
@@ -115,6 +120,7 @@ class BugTriageEnvironment:
             step_number=self._step_number,
             max_steps=TASK_MAX_STEPS[self._task_id],
             episode_history=list(self._episode_history),
+            feedback=self._last_feedback,
         )
 
     def _terminal_observation(self) -> BugTriageObservation:
@@ -129,7 +135,42 @@ class BugTriageEnvironment:
             step_number=0,
             max_steps=TASK_MAX_STEPS[self._task_id],
             episode_history=list(self._episode_history),
+            feedback=self._last_feedback,
         )
+
+    def _build_feedback(self, reward_obj: BugTriageReward, action: BugTriageAction) -> str:
+        """Generate human-readable feedback from the reward breakdown."""
+        bd = reward_obj.breakdown
+        issues = []
+
+        if "issue_type" in bd and not bd["issue_type"].get("correct"):
+            issues.append(
+                f"Issue type was '{bd['issue_type']['predicted']}' "
+                f"but should be '{bd['issue_type']['expected']}'"
+            )
+        if "severity" in bd and not bd["severity"].get("correct"):
+            issues.append(
+                f"Severity was '{bd['severity']['predicted']}' "
+                f"but should be '{bd['severity']['expected']}'"
+            )
+        if "component" in bd and not bd["component"].get("correct"):
+            issues.append(
+                f"Component was '{bd['component']['predicted']}' "
+                f"but should be '{bd['component']['expected']}'"
+            )
+        if "duplicate" in bd:
+            dup = bd["duplicate"]
+            if dup.get("expected_is_dup") and not dup.get("predicted_is_dup"):
+                issues.append(
+                    f"This was a duplicate of {dup['expected_id']} "
+                    f"but you did not flag it"
+                )
+            elif not dup.get("expected_is_dup") and dup.get("predicted_is_dup"):
+                issues.append("You flagged this as a duplicate but it is not one")
+
+        if not issues:
+            return "All fields correct."
+        return "Corrections: " + "; ".join(issues) + "."
 
     def _get_existing_issues_context(self) -> list:
         # Only Task 3 needs prior issues for duplicate detection

@@ -9,13 +9,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
 
-from models import (
-    BugTriageObservation,
-    StepRequest,
-    StepResponse,
-)
+from models import BugTriageObservation, StepRequest, StepResponse
 from environment import BugTriageEnvironment
 
 app = FastAPI(title="Bug Triage Environment", version="1.0.0")
@@ -29,7 +24,6 @@ app.add_middleware(
 
 env = BugTriageEnvironment()
 
-# ── Metrics ───────────────────────────────────────────────────────────────────
 _metrics_lock = threading.Lock()
 _metrics: dict = {
     "total_resets":      0,
@@ -54,7 +48,7 @@ def root():
             {"id": 2, "name": "Severity & Component Routing", "difficulty": "medium", "max_steps": 2},
             {"id": 3, "name": "Full Bug Triage",              "difficulty": "hard",   "max_steps": 3},
         ],
-        "endpoints": ["/reset", "/step", "/state", "/health", "/metrics"],
+        "endpoints": ["/reset", "/step", "/state", "/health", "/metrics", "/leaderboard"],
     }
 
 
@@ -89,7 +83,6 @@ async def reset(request: Request):
 def step(request: StepRequest):
     try:
         obs, reward, done, info = env.step(request.action)
-
         with _metrics_lock:
             _metrics["total_steps"] += 1
             task = info.get("task_id", 1)
@@ -109,7 +102,6 @@ def step(request: StepRequest):
                 _metrics["duplicate_total"] += 1
                 if bd["duplicate"].get("score", 0) > 0:
                     _metrics["duplicate_correct"] += 1
-
         return StepResponse(observation=obs, reward=reward, done=done, info=info)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -155,4 +147,67 @@ def get_metrics() -> dict:
             "duplicate_detection_rate": round(
                 _metrics["duplicate_correct"] / _metrics["duplicate_total"], 4
             ) if _metrics["duplicate_total"] else 0.0,
+        }
+
+
+@app.get("/leaderboard")
+def get_leaderboard() -> dict:
+    """Ranked summary of agent performance. Shows hardest components and severities."""
+    with _metrics_lock:
+        total_steps = _metrics["total_steps"]
+        if total_steps == 0:
+            return {
+                "message": "No episodes completed yet. Run inference.py to populate.",
+                "leaderboard": [],
+                "hardest_components": [],
+                "hardest_severities": [],
+            }
+
+        component_difficulty = []
+        for comp, total in _metrics["component_total"].items():
+            if total > 0:
+                correct = _metrics["component_correct"].get(comp, 0)
+                rate = round(correct / total, 4)
+                component_difficulty.append({
+                    "component": comp, "accuracy": rate,
+                    "correct": correct, "total": total,
+                    "difficulty": "hard" if rate < 0.5 else "medium" if rate < 0.8 else "easy",
+                })
+        component_difficulty.sort(key=lambda x: x["accuracy"])
+
+        severity_difficulty = []
+        for sev, total in _metrics["severity_total"].items():
+            if total > 0:
+                correct = _metrics["severity_correct"].get(sev, 0)
+                rate = round(correct / total, 4)
+                severity_difficulty.append({
+                    "severity": sev, "accuracy": rate,
+                    "correct": correct, "total": total,
+                    "difficulty": "hard" if rate < 0.5 else "medium" if rate < 0.8 else "easy",
+                })
+        severity_difficulty.sort(key=lambda x: x["accuracy"])
+
+        task_summary = []
+        for task_id in ["1", "2", "3"]:
+            rewards = _metrics["rewards_by_task"].get(task_id, [])
+            if rewards:
+                task_summary.append({
+                    "task_id": int(task_id),
+                    "episodes_run": len(rewards),
+                    "avg_reward": round(sum(rewards) / len(rewards), 4),
+                    "best_reward": round(max(rewards), 4),
+                    "worst_reward": round(min(rewards), 4),
+                })
+
+        dup_total = _metrics["duplicate_total"]
+        return {
+            "total_steps": total_steps,
+            "total_resets": _metrics["total_resets"],
+            "task_performance": task_summary,
+            "hardest_components": component_difficulty[:3],
+            "hardest_severities": severity_difficulty[:3],
+            "duplicate_detection_rate": round(
+                _metrics["duplicate_correct"] / dup_total, 4
+            ) if dup_total else 0.0,
+            "note": "Accuracy below 0.5 indicates a genuinely hard sub-task for the agent.",
         }

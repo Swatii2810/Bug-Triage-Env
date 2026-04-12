@@ -42,6 +42,14 @@ observation_space:
     episode_history:
       type: array
       description: "Agent's own prior triage decisions this episode. Each entry: {issue_id, title, agent_type, agent_severity, agent_component, reward}"
+    feedback:
+      type: string
+      description: >
+        Feedback from the previous triage decision. Empty string on the first
+        observation of each issue. After a step, describes any incorrect fields
+        so the agent can adjust on subsequent steps within the same issue.
+        Example: "Corrections: Severity was 'P3' but should be 'P1'; Component
+        was 'frontend' but should be 'backend'."
 
 endpoints:
   reset:   POST /reset
