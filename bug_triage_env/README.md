@@ -145,6 +145,30 @@ python inference.py
 
 ---
 
+## RL Training Demo
+
+Run `train_demo.py` to see the feedback signal in action across 3 episodes. The agent accumulates corrections from wrong decisions and uses them as in-context learning signal in subsequent episodes:
+
+```bash
+ENV_URL=http://localhost:7860 \
+API_KEY=your-key \
+MODEL_NAME=gpt-4o-mini \
+python train_demo.py
+```
+
+Expected output:
+```
+Episode 1: 0.4200 ████████████
+Episode 2: 0.5100 ███████████████
+Episode 3: 0.5800 █████████████████
+Total improved: +0.1600 (0.4200 → 0.5800)
+Feedback items accumulated: 8
+```
+
+For full RL training with GRPO/PPO against this environment, see the [TRL OpenEnv integration](https://huggingface.co/docs/trl/en/openenv).
+
+---
+
 ## Reward Function Design
 
 The reward function is designed to provide **dense signal** throughout an episode, not just at the end:
